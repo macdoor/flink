@@ -130,10 +130,10 @@ under the License.
 			<artifactId>flink-connector-cassandra_${scala.binary.version}</artifactId>
 		</dependency>
 
-		<dependency>
+		<!--dependency>
 			<groupId>org.apache.flink</groupId>
 			<artifactId>flink-connector-elasticsearch6</artifactId>
-		</dependency>
+		</dependency-->
 
 		<dependency>
 			<groupId>org.apache.flink</groupId>
