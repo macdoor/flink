@@ -55,7 +55,8 @@ public abstract class AbstractPrometheusReporter implements MetricReporter {
 
     protected final Logger log = LoggerFactory.getLogger(getClass());
 
-    private static final Pattern UNALLOWED_CHAR_PATTERN = Pattern.compile("[^a-zA-Z0-9:_]");
+    private static final Pattern UNALLOWED_CHAR_PATTERN =
+            Pattern.compile("[^a-zA-Z0-9\u4E00-\u9FA5\uf900-\ufa2d:_]");
     private static final CharacterFilter CHARACTER_FILTER =
             AbstractPrometheusReporter::replaceInvalidChars;
 
