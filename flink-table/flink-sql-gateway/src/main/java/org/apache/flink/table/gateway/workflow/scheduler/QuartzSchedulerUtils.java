@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.gateway.workflow.scheduler;
 
+import org.apache.flink.configuration.ConfigConstants;
 import org.apache.flink.util.jackson.JacksonMapperFactory;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
@@ -74,7 +75,19 @@ public class QuartzSchedulerUtils {
                 "org.quartz.threadPool.threadsInheritContextClassLoaderOfInitializingThread",
                 "true");
         properties.setProperty("org.quartz.jobStore.misfireThreshold", "60000");
-        properties.setProperty("org.quartz.jobStore.class", "org.quartz.simpl.RAMJobStore");
+        /** properties.setProperty("org.quartz.jobStore.class", "org.quartz.simpl.RAMJobStore"); */
+        properties.setProperty(
+                "org.quartz.jobStore.class", "org.quartz.impl.jdbcjobstore.JobStoreTX");
+        properties.setProperty(
+                "org.quartz.jobStore.driverDelegateClass",
+                "org.quartz.impl.jdbcjobstore.StdJDBCDelegate");
+        properties.setProperty("org.quartz.jobStore.dataSource", "disk");
+        properties.setProperty("org.quartz.dataSource.disk.driver", "org.h2.Driver");
+        properties.setProperty(
+                "org.quartz.dataSource.disk.URL",
+                "jdbc:h2:file:" + System.getenv(ConfigConstants.ENV_FLINK_CONF_DIR) + "/quartz");
+        properties.setProperty("org.quartz.dataSource.disk.user", "sa");
+        properties.setProperty("org.quartz.dataSource.disk.password", "");
 
         return properties;
     }
