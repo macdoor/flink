@@ -18,6 +18,7 @@
 
 package org.apache.flink.table.jdbc;
 
+import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
 import java.sql.RowIdLifetime;
@@ -28,182 +29,152 @@ import java.sql.SQLFeatureNotSupportedException;
 public abstract class BaseDatabaseMetaData implements DatabaseMetaData {
     @Override
     public String getUserName() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getUserName is not supported");
+        return "";
     }
 
     @Override
     public String getSQLKeywords() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getSQLKeywords is not supported");
+        return "";
     }
 
     @Override
     public String getNumericFunctions() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getNumericFunctions is not supported");
+        return "";
     }
 
     @Override
     public String getStringFunctions() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getStringFunctions is not supported");
+        return "";
     }
 
     @Override
     public String getSystemFunctions() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getSystemFunctions is not supported");
+        return "";
     }
 
     @Override
     public String getTimeDateFunctions() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getTimeDateFunctions is not supported");
+        return "";
     }
 
     @Override
     public String getSearchStringEscape() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getSearchStringEscape is not supported");
+        return "\\";
     }
 
     @Override
     public String getProcedureTerm() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getProcedureTerm is not supported");
+        return "procedure";
     }
 
     @Override
     public String getCatalogSeparator() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getCatalogSeparator is not supported");
+        return ".";
     }
 
     @Override
     public int getMaxBinaryLiteralLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxBinaryLiteralLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxCharLiteralLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxCharLiteralLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxColumnNameLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxColumnNameLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxColumnsInGroupBy() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxColumnsInGroupBy is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxColumnsInIndex() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxColumnsInIndex is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxColumnsInOrderBy() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxColumnsInOrderBy is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxColumnsInSelect() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxColumnsInSelect is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxColumnsInTable() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxColumnsInTable is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxConnections() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxConnections is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxCursorNameLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxCursorNameLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxIndexLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxIndexLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxSchemaNameLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxSchemaNameLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxProcedureNameLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxProcedureNameLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxCatalogNameLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxCatalogNameLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxRowSize() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxRowSize is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxStatementLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxStatementLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxStatements() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxStatements is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxTableNameLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxTableNameLength is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxTablesInSelect() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxTablesInSelect is not supported");
+        return 0;
     }
 
     @Override
     public int getMaxUserNameLength() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getMaxUserNameLength is not supported");
+        return 0;
     }
 
     @Override
     public int getDefaultTransactionIsolation() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getDefaultTransactionIsolation is not supported");
+        return Connection.TRANSACTION_NONE;
     }
 
     @Override
@@ -329,20 +300,17 @@ public abstract class BaseDatabaseMetaData implements DatabaseMetaData {
 
     @Override
     public int getResultSetHoldability() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getResultSetHoldability is not supported");
+        return ResultSet.CLOSE_CURSORS_AT_COMMIT;
     }
 
     @Override
     public int getSQLStateType() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getSQLStateType is not supported");
+        return DatabaseMetaData.sqlStateSQL;
     }
 
     @Override
     public RowIdLifetime getRowIdLifetime() throws SQLException {
-        throw new SQLFeatureNotSupportedException(
-                "FlinkDatabaseMetaData#getRowIdLifetime is not supported");
+        return RowIdLifetime.ROWID_UNSUPPORTED;
     }
 
     @Override

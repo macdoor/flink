@@ -25,14 +25,18 @@ import org.apache.flink.table.data.RowData;
 import org.apache.commons.lang3.StringUtils;
 import org.junit.jupiter.api.Test;
 
+import java.sql.Connection;
 import java.sql.DatabaseMetaData;
 import java.sql.ResultSet;
+import java.sql.RowIdLifetime;
+import java.sql.Types;
 import java.util.ArrayList;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /** Tests for flink database metadata. */
@@ -190,6 +194,172 @@ public class FlinkDatabaseMetaDataTest extends FlinkJdbcDriverTestBase {
             assertFalse(databaseMetaData.supportsStoredFunctionsUsingCallSyntax());
             assertFalse(databaseMetaData.autoCommitFailureClosesAllResultSets());
             assertFalse(databaseMetaData.generatedKeyAlwaysReturned());
+        }
+    }
+
+    @Test
+    public void testGetSchemasWithCatalogFilter() throws Exception {
+        DriverUri driverUri = getDriverUri();
+        try (FlinkConnection connection = new FlinkConnection(driverUri)) {
+            Executor executor = connection.getExecutor();
+            executeDDL("CREATE DATABASE db_a", executor);
+            executeDDL("CREATE DATABASE db_b", executor);
+
+            DatabaseMetaData metaData =
+                    new FlinkDatabaseMetaData(
+                            driverUri.getURL(), connection, new TestingStatement());
+
+            // Filter schemas by catalog
+            List<String> schemas =
+                    resultSetToListAndClose(metaData.getSchemas("default_catalog", null));
+            assertThat(schemas).contains("default_database,default_catalog");
+            assertThat(schemas).contains("db_a,default_catalog");
+            assertThat(schemas).contains("db_b,default_catalog");
+
+            // Filter schemas by pattern
+            List<String> filtered =
+                    resultSetToListAndClose(metaData.getSchemas("default_catalog", "db_%"));
+            assertThat(filtered).contains("db_a,default_catalog");
+            assertThat(filtered).contains("db_b,default_catalog");
+            assertThat(filtered).doesNotContain("default_database,default_catalog");
+        }
+    }
+
+    @Test
+    public void testGetTablesAndTableTypes() throws Exception {
+        DriverUri driverUri = getDriverUri();
+        try (FlinkConnection connection = new FlinkConnection(driverUri)) {
+            Executor executor = connection.getExecutor();
+            executeDDL(
+                    "CREATE TABLE test_table1 (id INT, name STRING) WITH ('connector' = 'blackhole')",
+                    executor);
+            executeDDL(
+                    "CREATE TABLE test_table2 (id BIGINT) WITH ('connector' = 'blackhole')",
+                    executor);
+
+            DatabaseMetaData metaData =
+                    new FlinkDatabaseMetaData(
+                            driverUri.getURL(), connection, new TestingStatement());
+
+            // getTableTypes should return TABLE and VIEW
+            List<String> tableTypes = resultSetToListAndClose(metaData.getTableTypes());
+            assertThat(tableTypes).containsExactly("TABLE", "VIEW");
+
+            // getTables should list the tables we created
+            List<String> tables =
+                    resultSetToListAndClose(
+                            metaData.getTables(
+                                    "default_catalog",
+                                    "default_database",
+                                    "%",
+                                    new String[] {"TABLE"}));
+            assertThat(tables)
+                    .anyMatch(s -> s.contains("test_table1"))
+                    .anyMatch(s -> s.contains("test_table2"));
+
+            // getTables with name pattern filter
+            List<String> filtered =
+                    resultSetToListAndClose(
+                            metaData.getTables(
+                                    "default_catalog", "default_database", "test_table1", null));
+            assertThat(filtered).hasSize(1);
+            assertThat(filtered.get(0)).contains("test_table1");
+
+            // Verify connection state is restored
+            assertEquals("default_catalog", connection.getCatalog());
+            assertEquals("default_database", connection.getSchema());
+        }
+    }
+
+    @Test
+    public void testGetColumns() throws Exception {
+        DriverUri driverUri = getDriverUri();
+        try (FlinkConnection connection = new FlinkConnection(driverUri)) {
+            Executor executor = connection.getExecutor();
+            executeDDL(
+                    "CREATE TABLE column_test (id INT NOT NULL, name STRING, score DOUBLE) WITH ('connector' = 'blackhole')",
+                    executor);
+
+            DatabaseMetaData metaData =
+                    new FlinkDatabaseMetaData(
+                            driverUri.getURL(), connection, new TestingStatement());
+
+            ResultSet rs =
+                    metaData.getColumns("default_catalog", "default_database", "column_test", null);
+            assertNotNull(rs);
+
+            List<String> columnNames = new ArrayList<>();
+            List<Integer> dataTypes = new ArrayList<>();
+            while (rs.next()) {
+                columnNames.add(rs.getString("COLUMN_NAME"));
+                dataTypes.add(rs.getInt("DATA_TYPE"));
+                assertEquals("default_catalog", rs.getString("TABLE_CAT"));
+                assertEquals("default_database", rs.getString("TABLE_SCHEM"));
+                assertEquals("column_test", rs.getString("TABLE_NAME"));
+            }
+            rs.close();
+
+            assertThat(columnNames).containsExactly("id", "name", "score");
+            assertThat(dataTypes).containsExactly(Types.INTEGER, Types.VARCHAR, Types.DOUBLE);
+        }
+    }
+
+    @Test
+    public void testGetPrimaryKeys() throws Exception {
+        DriverUri driverUri = getDriverUri();
+        try (FlinkConnection connection = new FlinkConnection(driverUri)) {
+            Executor executor = connection.getExecutor();
+            executeDDL(
+                    "CREATE TABLE pk_test (id INT NOT NULL, name STRING, PRIMARY KEY (id) NOT ENFORCED) WITH ('connector' = 'blackhole')",
+                    executor);
+
+            DatabaseMetaData metaData =
+                    new FlinkDatabaseMetaData(
+                            driverUri.getURL(), connection, new TestingStatement());
+
+            ResultSet rs =
+                    metaData.getPrimaryKeys("default_catalog", "default_database", "pk_test");
+            assertNotNull(rs);
+
+            List<String> pkColumns = new ArrayList<>();
+            while (rs.next()) {
+                pkColumns.add(rs.getString("COLUMN_NAME"));
+                assertEquals("default_catalog", rs.getString("TABLE_CAT"));
+                assertEquals("default_database", rs.getString("TABLE_SCHEM"));
+                assertEquals("pk_test", rs.getString("TABLE_NAME"));
+            }
+            rs.close();
+
+            assertThat(pkColumns).containsExactly("id");
+        }
+    }
+
+    @Test
+    public void testBaseDatabaseMetaDataDefaults() throws Exception {
+        DriverUri driverUri = getDriverUri();
+        try (FlinkConnection connection = new FlinkConnection(driverUri)) {
+            DatabaseMetaData metaData =
+                    new FlinkDatabaseMetaData(
+                            driverUri.getURL(), connection, new TestingStatement());
+
+            // String-returning methods should not throw
+            assertEquals(".", metaData.getCatalogSeparator());
+            assertEquals("\\", metaData.getSearchStringEscape());
+            assertEquals("", metaData.getUserName());
+            assertEquals("", metaData.getSQLKeywords());
+            assertEquals("procedure", metaData.getProcedureTerm());
+
+            // Max methods should return 0 (no limit)
+            assertEquals(0, metaData.getMaxColumnNameLength());
+            assertEquals(0, metaData.getMaxTableNameLength());
+            assertEquals(0, metaData.getMaxConnections());
+            assertEquals(0, metaData.getMaxStatements());
+
+            // Transaction/holdability methods
+            assertEquals(Connection.TRANSACTION_NONE, metaData.getDefaultTransactionIsolation());
+            assertEquals(ResultSet.CLOSE_CURSORS_AT_COMMIT, metaData.getResultSetHoldability());
+            assertEquals(DatabaseMetaData.sqlStateSQL, metaData.getSQLStateType());
+            assertEquals(RowIdLifetime.ROWID_UNSUPPORTED, metaData.getRowIdLifetime());
         }
     }
 

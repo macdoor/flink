@@ -154,6 +154,21 @@ No rows affected (0.122 seconds)
 2. Select *Other Database (JDBC)* under *Connect* and fill in the url of Flink SQL gateway. Select *SQL92* dialect and leave user name and password empty.
 3. Hit *Login* button and use Tableau as usual.
 
+### DataGrip
+
+[DataGrip](https://www.jetbrains.com/datagrip/) 是 JetBrains 的数据库 IDE。你可以使用 Flink JDBC 驱动将 DataGrip 连接到 Flink SQL Gateway，交互式地执行 Flink SQL。
+
+1. 从[下载页面](https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-jdbc-driver-bundle/)下载 flink-jdbc-driver-bundle-{VERSION}.jar。
+2. 在 DataGrip 中，进入 **File > Data Sources**（或 **Database** 工具窗口），点击 **+** > **Driver**。添加下载的 JAR 文件，并将驱动类设置为 `org.apache.flink.table.jdbc.FlinkDriver`。
+3. 使用刚创建的驱动新建一个 Data Source。将 URL 设置为 `jdbc:flink://<host>:<port>`（例如 `jdbc:flink://localhost:8083`）。用户名和密码留空。
+4. 点击 **Test Connection** 验证连接，然后点击 **OK**。
+
+连接成功后，DataGrip 可以在左侧数据库树中浏览 catalog、database 和表，你可以在查询控制台中执行 Flink SQL 语句。
+
+{{< hint warning >}}
+Flink JDBC 驱动并未实现所有 `DatabaseMetaData` 方法。部分高级元数据功能（如导入/导出键和索引信息）不可用。DataGrip 可以正常用作查询控制台，但对于不支持的元数据操作可能会显示警告。
+{{< /hint >}}
+
 ### Use with other JDBC Tools
 
 Any tool supporting JDBC API can be used with Flink JDBC driver and Flink SQL gateway. See the documentation of your desired tool on how to use a JDBC driver.

@@ -178,6 +178,21 @@ No rows affected (0.122 seconds)
 2. Select *Other Database (JDBC)* under *Connect* and fill in the url of Flink SQL gateway. Select *SQL92* dialect and leave user name and password empty.
 3. Hit *Login* button and use Tableau as usual.
 
+### DataGrip
+
+[DataGrip](https://www.jetbrains.com/datagrip/) is a database IDE from JetBrains. You can use the Flink JDBC driver to connect DataGrip to a Flink SQL gateway and run Flink SQL interactively.
+
+1. Download flink-jdbc-driver-bundle-{VERSION}.jar from the [download page](https://repo.maven.apache.org/maven2/org/apache/flink/flink-sql-jdbc-driver-bundle/).
+2. In DataGrip, go to **File > Data Sources** (or the **Database** tool window), click **+** > **Driver**. Add the downloaded JAR file and set the driver class to `org.apache.flink.table.jdbc.FlinkDriver`.
+3. Create a new Data Source using the driver you just created. Set the URL to `jdbc:flink://<host>:<port>` (e.g. `jdbc:flink://localhost:8083`). Leave user name and password empty.
+4. Click **Test Connection** to verify, then **OK**.
+
+After connecting, DataGrip can browse catalogs, databases, and tables in the left-hand database tree, and you can execute Flink SQL statements in the query console.
+
+{{< hint warning >}}
+The Flink JDBC driver does not implement all `DatabaseMetaData` methods. Some advanced introspection features (such as imported/exported keys and index info) are not available. DataGrip is fully usable as a query console but may show warnings for unsupported metadata operations.
+{{< /hint >}}
+
 ### Use with other JDBC Tools
 
 Any tool supporting JDBC API can be used with Flink JDBC driver and Flink SQL gateway. See the documentation of your desired tool on how to use a custom JDBC driver.

@@ -35,7 +35,6 @@ import javax.annotation.Nullable;
 import java.net.URI;
 import java.nio.file.Path;
 import java.sql.ResultSet;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.Statement;
 import java.util.ArrayList;
 import java.util.List;
@@ -79,9 +78,7 @@ public class FlinkStatementTest extends FlinkJdbcDriverTestBase {
                                         + "(3, 33, '333', TIMESTAMP '2021-04-16 23:18:36', TO_TIMESTAMP_LTZ(500000000000, 3), TIME '13:32:00', DATE '2023-12-02'), "
                                         + "(2, 22, '222', TIMESTAMP '2021-04-17 23:18:36', TO_TIMESTAMP_LTZ(600000000000, 3), TIME '14:32:00', DATE '2023-01-02'), "
                                         + "(4, 44, '444', TIMESTAMP '2021-04-18 23:18:36', TO_TIMESTAMP_LTZ(700000000000, 3), TIME '15:32:00', DATE '2023-02-02')"));
-                assertThatThrownBy(statement::getUpdateCount)
-                        .isInstanceOf(SQLFeatureNotSupportedException.class)
-                        .hasMessage("FlinkStatement#getUpdateCount is not supported for query");
+                assertEquals(-1, statement.getUpdateCount());
 
                 String jobId;
                 try (ResultSet resultSet = statement.getResultSet()) {

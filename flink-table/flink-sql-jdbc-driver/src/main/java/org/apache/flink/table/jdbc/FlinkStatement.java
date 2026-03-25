@@ -38,6 +38,9 @@ public class FlinkStatement extends BaseStatement {
     private FlinkResultSet currentResults;
     private boolean hasResults;
     private boolean closed;
+    private int fetchSize = 0;
+    /** 0 means no limit (JDBC convention). Not enforced server-side; stored for IDE compatibility. */
+    private int maxRows = 0;
 
     public FlinkStatement(FlinkConnection connection) {
         this.connection = connection;
@@ -103,6 +106,31 @@ public class FlinkStatement extends BaseStatement {
     @Override
     public void clearWarnings() throws SQLException {}
 
+    @Override
+    public void setFetchSize(int rows) throws SQLException {
+        // DataGrip may set fetch size during metadata probing / result rendering.
+        // Flink JDBC driver does not support server-side cursors, so we treat it as a no-op.
+        this.fetchSize = rows;
+    }
+
+    @Override
+    public int getFetchSize() throws SQLException {
+        return fetchSize;
+    }
+
+    @Override
+    public void setMaxRows(int max) throws SQLException {
+        if (max < 0) {
+            throw new SQLException("maxRows must be >= 0");
+        }
+        this.maxRows = max;
+    }
+
+    @Override
+    public int getMaxRows() throws SQLException {
+        return maxRows;
+    }
+
     private void checkClosed() throws SQLException {
         if (closed) {
             throw new SQLException("This result set is already closed");
@@ -165,12 +193,11 @@ public class FlinkStatement extends BaseStatement {
 
     @Override
     public int getUpdateCount() throws SQLException {
+        // JDBC: return -1 when the current result is a ResultSet (or there are no more results).
         if (hasResults) {
-            throw new SQLFeatureNotSupportedException(
-                    "FlinkStatement#getUpdateCount is not supported for query");
-        } else {
-            return 0;
+            return -1;
         }
+        return 0;
     }
 
     @Override

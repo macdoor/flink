@@ -184,6 +184,11 @@ public class FlinkConnection extends BaseConnection {
         return null;
     }
 
+    // DataGrip/IDE metadata probing may call clearWarnings() during connection lifecycle.
+    // Flink JDBC driver currently doesn't surface warnings, so this is a no-op.
+    @Override
+    public void clearWarnings() throws SQLException {}
+
     @Override
     public void setClientInfo(String name, String value) throws SQLClientInfoException {
         try {
