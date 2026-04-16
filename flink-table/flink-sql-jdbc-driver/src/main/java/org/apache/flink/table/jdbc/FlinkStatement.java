@@ -27,7 +27,6 @@ import javax.annotation.concurrent.NotThreadSafe;
 import java.sql.Connection;
 import java.sql.ResultSet;
 import java.sql.SQLException;
-import java.sql.SQLFeatureNotSupportedException;
 import java.sql.SQLWarning;
 
 /** Statement for flink jdbc driver. Notice that the statement is not thread safe. */
@@ -41,6 +40,8 @@ public class FlinkStatement extends BaseStatement {
     private int fetchSize = 0;
     /** 0 means no limit (JDBC convention). Not enforced server-side; stored for IDE compatibility. */
     private int maxRows = 0;
+    /** -1 means no update count available (JDBC: "no more results"). */
+    private int updateCount = -1;
 
     public FlinkStatement(FlinkConnection connection) {
         this.connection = connection;
@@ -151,10 +152,12 @@ public class FlinkStatement extends BaseStatement {
         if (result.isQueryResult() || result.getResultKind() == ResultKind.SUCCESS_WITH_CONTENT) {
             currentResults = new FlinkResultSet(this, result);
             hasResults = true;
+            updateCount = -1;
             return true;
         }
 
         hasResults = false;
+        updateCount = 0;
         return false;
     }
 
@@ -185,19 +188,18 @@ public class FlinkStatement extends BaseStatement {
 
         if (currentResults != null) {
             cancel();
-            return false;
         }
-
-        throw new SQLFeatureNotSupportedException("Multiple open results not supported");
+        hasResults = false;
+        updateCount = -1;
+        return false;
     }
 
     @Override
     public int getUpdateCount() throws SQLException {
-        // JDBC: return -1 when the current result is a ResultSet (or there are no more results).
         if (hasResults) {
             return -1;
         }
-        return 0;
+        return updateCount;
     }
 
     @Override
