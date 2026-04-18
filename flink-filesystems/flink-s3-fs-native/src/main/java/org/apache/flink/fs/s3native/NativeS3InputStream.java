@@ -37,6 +37,13 @@ import java.util.concurrent.locks.ReentrantLock;
  *
  * <p><b>Thread Safety:</b> Internal state is guarded by a lock to ensure safe concurrent access and
  * resource cleanup.
+ *
+ * <p><b>Partial reads and {@code seek}:</b> Apache HttpClient tries to drain the remainder of the
+ * response body on {@link java.io.InputStream#close()} to reuse connections. After a {@link #seek}
+ * or early close, draining can fail against S3-compatible endpoints (for example MinIO) with {@code
+ * ConnectionClosedException: Premature end of Content-Length delimited message body}. For any
+ * abandoned response we call {@link ResponseInputStream#abort()} instead of draining via {@code
+ * close()}.
  */
 class NativeS3InputStream extends FSDataInputStream {
 
@@ -108,24 +115,7 @@ class NativeS3InputStream extends FSDataInputStream {
     private void openStreamAtCurrentPosition() throws IOException {
         lock.lock();
         try {
-            if (bufferedStream != null) {
-                try {
-                    bufferedStream.close();
-                } catch (IOException e) {
-                    LOG.warn("Error closing buffered stream for {}/{}", bucketName, key, e);
-                } finally {
-                    bufferedStream = null;
-                }
-            }
-            if (currentStream != null) {
-                try {
-                    currentStream.close();
-                } catch (IOException e) {
-                    LOG.warn("Error closing S3 response stream for {}/{}", bucketName, key, e);
-                } finally {
-                    currentStream = null;
-                }
-            }
+            releaseCurrentObjectStream(true);
 
             try {
                 GetObjectRequest.Builder requestBuilder =
@@ -143,24 +133,53 @@ class NativeS3InputStream extends FSDataInputStream {
                 currentStream = s3Client.getObject(requestBuilder.build());
                 bufferedStream = new BufferedInputStream(currentStream, readBufferSize);
             } catch (Exception e) {
-                if (bufferedStream != null) {
-                    try {
-                        bufferedStream.close();
-                    } catch (IOException ignored) {
-                    }
-                    bufferedStream = null;
-                }
-                if (currentStream != null) {
-                    try {
-                        currentStream.close();
-                    } catch (IOException ignored) {
-                    }
-                    currentStream = null;
-                }
+                releaseCurrentObjectStream(true);
                 throw new IOException("Failed to open S3 stream for " + bucketName + "/" + key, e);
             }
         } finally {
             lock.unlock();
+        }
+    }
+
+    /**
+     * Releases the in-flight {@code GetObject} HTTP response.
+     *
+     * @param abortWithoutDraining if true, {@link ResponseInputStream#abort()} is used so the SDK
+     *     does not try to read the rest of the body (required after {@link #seek} and for early
+     *     close when the logical object tail was not read).
+     */
+    private void releaseCurrentObjectStream(boolean abortWithoutDraining) {
+        if (currentStream == null && bufferedStream == null) {
+            return;
+        }
+        if (abortWithoutDraining && currentStream != null) {
+            try {
+                currentStream.abort();
+            } catch (RuntimeException e) {
+                LOG.warn("Error aborting S3 response stream for {}/{}", bucketName, key, e);
+            } finally {
+                bufferedStream = null;
+                currentStream = null;
+            }
+            return;
+        }
+        if (bufferedStream != null) {
+            try {
+                bufferedStream.close();
+            } catch (IOException e) {
+                LOG.warn("Error closing buffered stream for {}/{}", bucketName, key, e);
+            } finally {
+                bufferedStream = null;
+                currentStream = null;
+            }
+        } else if (currentStream != null) {
+            try {
+                currentStream.close();
+            } catch (IOException e) {
+                LOG.warn("Error closing S3 response stream for {}/{}", bucketName, key, e);
+            } finally {
+                currentStream = null;
+            }
         }
     }
 
@@ -270,33 +289,8 @@ class NativeS3InputStream extends FSDataInputStream {
             }
 
             closed = true;
-            IOException exception = null;
-
-            if (bufferedStream != null) {
-                try {
-                    bufferedStream.close();
-                } catch (IOException e) {
-                    exception = e;
-                    LOG.warn("Error closing buffered stream for {}/{}", bucketName, key, e);
-                } finally {
-                    bufferedStream = null;
-                }
-            }
-
-            if (currentStream != null) {
-                try {
-                    currentStream.close();
-                } catch (IOException e) {
-                    if (exception == null) {
-                        exception = e;
-                    } else {
-                        exception.addSuppressed(e);
-                    }
-                    LOG.warn("Error closing S3 response stream for {}/{}", bucketName, key, e);
-                } finally {
-                    currentStream = null;
-                }
-            }
+            boolean discardRemaining = position < contentLength;
+            releaseCurrentObjectStream(discardRemaining);
 
             LOG.debug(
                     "Closed S3 input stream - bucket: {}, key: {}, final position: {}/{}",
@@ -304,9 +298,6 @@ class NativeS3InputStream extends FSDataInputStream {
                     key,
                     position,
                     contentLength);
-            if (exception != null) {
-                throw exception;
-            }
         } finally {
             lock.unlock();
         }
