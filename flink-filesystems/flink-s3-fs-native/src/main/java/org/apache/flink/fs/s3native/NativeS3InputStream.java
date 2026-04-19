@@ -41,9 +41,14 @@ import java.util.concurrent.locks.ReentrantLock;
  * <p><b>Partial reads and {@code seek}:</b> Apache HttpClient tries to drain the remainder of the
  * response body on {@link java.io.InputStream#close()} to reuse connections. After a {@link #seek}
  * or early close, draining can fail against S3-compatible endpoints (for example MinIO) with {@code
- * ConnectionClosedException: Premature end of Content-Length delimited message body}. For any
- * abandoned response we call {@link ResponseInputStream#abort()} instead of draining via {@code
- * close()}.
+ * ConnectionClosedException: Premature end of Content-Length delimited message body}.
+ *
+ * <p>The {@code close()} path handles this gracefully: it attempts normal connection cleanup first
+ * (which preserves HTTP connection reuse for well-behaved servers), and only falls back to {@link
+ * ResponseInputStream#abort()} when the connection was already closed early by the server — in
+ * which case the connection is not reusable anyway, so aborting carries no performance penalty.
+ * Abandoned streams after {@link #seek} always use {@code abort()} immediately since the connection
+ * is being discarded regardless.
  */
 class NativeS3InputStream extends FSDataInputStream {
 
@@ -107,7 +112,7 @@ class NativeS3InputStream extends FSDataInputStream {
      * <p>This method:
      *
      * <ul>
-     *   <li>Closes any existing stream
+     *   <li>Closes any existing stream (using {@code abort()} since it is being discarded)
      *   <li>Opens a new stream starting at {@link #position}
      *   <li>Uses HTTP range requests for non-zero positions
      * </ul>
@@ -144,15 +149,26 @@ class NativeS3InputStream extends FSDataInputStream {
     /**
      * Releases the in-flight {@code GetObject} HTTP response.
      *
-     * @param abortWithoutDraining if true, {@link ResponseInputStream#abort()} is used so the SDK
-     *     does not try to read the rest of the body (required after {@link #seek} and for early
-     *     close when the logical object tail was not read).
+     * <p>When {@code abandon} is {@code true}, the stream is being discarded (e.g. after a {@link
+     * #seek}) and {@link ResponseInputStream#abort()} is called immediately, bypassing any attempt
+     * to drain the response body. This is necessary for correctness because the caller has already
+     * moved on and will not consume the rest of the body.
+     *
+     * <p>When {@code abandon} is {@code false}, normal {@code close()} is attempted first. This
+     * preserves HTTP connection reuse for well-behaved S3 servers. If the server closes the
+     * connection early (a pattern seen on MinIO and other S3-compatible storage), the resulting
+     * {@code ConnectionClosedException} is caught, treated as non-fatal, and escalated to a WARN
+     * log. The connection is then aborted since it is no longer usable anyway.
+     *
+     * @param abandon {@code true} to use {@code abort()} immediately (stream is being abandoned
+     *     after seek); {@code false} to try {@code close()} first, falling back to {@code abort()}
+     *     on early-connection-close from MinIO
      */
-    private void releaseCurrentObjectStream(boolean abortWithoutDraining) {
+    private void releaseCurrentObjectStream(boolean abandon) {
         if (currentStream == null && bufferedStream == null) {
             return;
         }
-        if (abortWithoutDraining && currentStream != null) {
+        if (abandon && currentStream != null) {
             try {
                 currentStream.abort();
             } catch (RuntimeException e) {
@@ -163,11 +179,27 @@ class NativeS3InputStream extends FSDataInputStream {
             }
             return;
         }
+
+        // Normal close path: attempt graceful cleanup to preserve HTTP connection reuse.
+        // S3-compatible storage (MinIO) may close the connection before all bytes are drained.
+        // In that case the ConnectionClosedException is non-fatal — abort the stream and
+        // log a WARN so the task does not fail.
         if (bufferedStream != null) {
             try {
                 bufferedStream.close();
             } catch (IOException e) {
-                LOG.warn("Error closing buffered stream for {}/{}", bucketName, key, e);
+                if (isPrematureEndOfMessage(e)) {
+                    LOG.warn(
+                            "S3 server closed connection prematurely for {}/{} (expected {} bytes) "
+                                    + "-- aborting and treating as non-fatal",
+                            bucketName,
+                            key,
+                            contentLength,
+                            e);
+                    abortSafely();
+                } else {
+                    LOG.warn("Error closing buffered stream for {}/{}", bucketName, key, e);
+                }
             } finally {
                 bufferedStream = null;
                 currentStream = null;
@@ -176,11 +208,46 @@ class NativeS3InputStream extends FSDataInputStream {
             try {
                 currentStream.close();
             } catch (IOException e) {
-                LOG.warn("Error closing S3 response stream for {}/{}", bucketName, key, e);
+                if (isPrematureEndOfMessage(e)) {
+                    LOG.warn(
+                            "S3 server closed connection prematurely for {}/{} (expected {} bytes) "
+                                    + "-- aborting and treating as non-fatal",
+                            bucketName,
+                            key,
+                            contentLength,
+                            e);
+                    abortSafely();
+                } else {
+                    LOG.warn("Error closing S3 response stream for {}/{}", bucketName, key, e);
+                }
             } finally {
                 currentStream = null;
             }
         }
+    }
+
+    /** Abort the underlying {@code ResponseInputStream} safely, logging any exception as a WARN. */
+    private void abortSafely() {
+        if (currentStream == null) {
+            return;
+        }
+        try {
+            currentStream.abort();
+        } catch (RuntimeException e) {
+            LOG.warn("Error aborting S3 response stream for {}/{}", bucketName, key, e);
+        }
+    }
+
+    /**
+     * Returns true if the given I/O exception represents a connection closed before all bytes were
+     * received — a pattern seen on S3-compatible storage (MinIO) when it closes a connection early
+     * and Apache HttpClient tries to drain the remainder.
+     */
+    private static boolean isPrematureEndOfMessage(IOException e) {
+        String msg = e.getMessage() != null ? e.getMessage() : "";
+        return msg.contains("Premature end of Content-Length")
+                || msg.contains("Connection closed")
+                || msg.contains("ConnectionClosed");
     }
 
     @Override
@@ -287,9 +354,12 @@ class NativeS3InputStream extends FSDataInputStream {
             if (closed) {
                 return;
             }
-
             closed = true;
-            boolean discardRemaining = position < contentLength;
+
+            // Only skip normal close and go straight to abort if the stream was fully read.
+            // Otherwise we try close() first (to preserve connection reuse), falling back to
+            // abort() when MinIO closed the connection early (which makes reuse impossible anyway).
+            boolean discardRemaining = position >= contentLength;
             releaseCurrentObjectStream(discardRemaining);
 
             LOG.debug(
